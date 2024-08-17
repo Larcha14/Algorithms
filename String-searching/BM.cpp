@@ -10,7 +10,7 @@ typedef pair<uint64_t, uint64_t> TPos;
 template <class T>
 using TVal = pair<T, TPos>;
 
-// Возвращаем ближайший элемент, меньше данного
+// Return index of the left nearest element unequal to the required element
 template<class T>
 uint64_t nearest_pos(T needed_val, vector<T> &array){
     if(array.size()==0) return 0;
@@ -18,7 +18,6 @@ uint64_t nearest_pos(T needed_val, vector<T> &array){
     uint64_t r = array.size()-1;
     while (l<r){
         uint64_t m = (r+l+1)/2;
-        // cout<<"\nStep | l = "<<l<<"; r = "<<r<<"; m = "<<m<<"\n";
         if (needed_val > array[m]){
             l = m;
         } else {
@@ -75,8 +74,6 @@ namespace BM_search{
             uint64_t bad_symbol_shift(uint64_t cur_idx, T mismatch_val);
             uint64_t good_suffix_shift(uint64_t cur_idx);    
 
-                 
-
         public:
             TPatern(vector<T> input_array){
                 pattern_data = move(input_array);
@@ -104,9 +101,6 @@ namespace BM_search{
             ~TPatern(){};
     };
 
-    template<class T>
-    vector<TPos> search_func( vector<TVal<T>> text_data, TPatern<T> pattern);
-
     template <class T>
     vector<uint64_t> make_z_function(vector<T> input_vector);
 
@@ -114,36 +108,15 @@ namespace BM_search{
     vector<T> reverse_array(vector<T> &input_vector);
 };
 
-template<class T>
-vector<TPos> BM_search::search_func( vector<TVal<T>> &text_data, TPatern<T> &pattern){
-    uint64_t p_size = pattern.pattern_size();
-    vector<TPos> answ;
-    uint64_t r_border = p_size-1;
-    if (text_data.size()< p_size) return answ;
-    while(r_border<text_data.size()){
-        uint64_t i_t=r_border, j_p=p_size-1;
-        while(j_p>=0 and text_data[i_t].first ==pattern[j_p]){
-            i_t--;
-            j_p--;
-        }
-        if(j_p<0){
-            answ.push_back(text_data[i_t].second);
-            r_border++;
-        } else{
-            r_border += pattern.get_shift(j_p, text_data[i_t].first);
-        }
-    }
-    return answ;
-}
-
 
 template<class T>
-void BM_search::TPatern<T>::bad_symbols_init(){
+void BM_search::TPatern<T>::bad_symbols_init(){ // I use the strong bad symbol heuristic, that find for all unique values their possition
+    //I'm using unordered_map<T, vector<uint64_t>> bad_symbol_pos;
     for(int i=0;i<pattern_data.size();++i){
-        if(!bad_symbol_pos.contains(pattern_data[i])){
+        if(!bad_symbol_pos.contains(pattern_data[i])){ //If we haven't met the unique values until now, we create vector for this value
             vector<uint64_t> new_vector(1, i);
             bad_symbol_pos.insert({pattern_data[i], new_vector});
-        } else{
+        } else{ // If we have already met that value, we add its position at vector
             vector<uint64_t> &vector_ref = bad_symbol_pos[pattern_data[i]];
             vector_ref.push_back(i);
         }
@@ -151,7 +124,7 @@ void BM_search::TPatern<T>::bad_symbols_init(){
 }
 
 template<class T>
-uint64_t BM_search::TPatern<T>::bad_symbol_shift(uint64_t cur_idx, T mismatch_val){
+uint64_t BM_search::TPatern<T>::bad_symbol_shift(uint64_t cur_idx, T mismatch_val){ //Get shift by bad symbol heuristic
     if (!bad_symbol_pos.contains(mismatch_val)){
         return 1;
     }
@@ -164,7 +137,6 @@ template<class T>
 void BM_search::TPatern<T>::print_bad_symbol_array(){
     for(const auto &it : bad_symbol_pos){
         cout<<"Pattern "<<it.first<<" ; idx: ";
-        // cout<<it.first<<' '; 
         vector<uint64_t> &vector_ref= bad_symbol_pos[it.first];
         for(int j = 0; j< vector_ref.size();++j){
             cout<<vector_ref[j]<<' ';
@@ -205,22 +177,26 @@ vector<T> BM_search::reverse_array(vector<T> &input_vector){
 }
 
 template <class T>
-void  BM_search::TPatern<T>::good_suffix_init(){
+void  BM_search::TPatern<T>::good_suffix_init(){//I use the strong good suffix heuristic, 
     uint64_t n = pattern_data.size();
-    // cout<<"\nN ="<<n<<"\n";
     if (n==0) return;
     good_suf_pos.resize(n,0);
-    vector<uint64_t> z_func_re = make_z_function<T>(reverse_array<T>(pattern_data));
+    vector<uint64_t> z_func_re = make_z_function<T>(reverse_array<T>(pattern_data)); // get z-function of reversed pattern
+    good_suf_pos[n-1] = 1;
     for(uint64_t i=n-1; i>0;--i){
-        // cout<<"Z["<<i<<"]="<<z_func_re[i]<<'\n';
         if(z_func_re[i]!=0) good_suf_pos[n-1-z_func_re[i]]=i;
     }
-    good_suf_pos[n-1] = 1;
+    for(int i=n-2; i>0;--i){
+        if (good_suf_pos[i]==0){
+            good_suf_pos[i]=good_suf_pos[i+1];
+        }
+    }
+    if(good_suf_pos[0]==0 and n>1) good_suf_pos[0]=good_suf_pos[1];
 
 }
 
 template<class T>
-uint64_t BM_search::TPatern<T>::good_suffix_shift(uint64_t cur_idx){
+uint64_t BM_search::TPatern<T>::good_suffix_shift(uint64_t cur_idx){ //Get shift by good suffix heuristic
     return good_suf_pos[cur_idx];
 }
 
@@ -236,27 +212,17 @@ void BM_search::TPatern<T>::print_good_suffix_array(){
 
 
 template<class T>
-uint64_t BM_search::TPatern<T>::get_shift(uint64_t cur_pattern_idx, T mismatch_val){
+uint64_t BM_search::TPatern<T>::get_shift(uint64_t cur_pattern_idx, T mismatch_val){ //The best shift is the maximum of two  heuristic's shift
     return max(uint64_t(1), max(bad_symbol_shift(cur_pattern_idx, mismatch_val), good_suffix_shift(cur_pattern_idx)));
 }
 
 int main(){
+        std::ios::sync_with_stdio(false);
+    std::cin.tie(nullptr);
     vector<uint64_t> pattern_v = pattern_parser<uint64_t>();
     vector<TVal<uint64_t>> text_data = text_parser<uint64_t>(1,1);
-    BM_search::TPatern<uint64_t> pattern(pattern_v);
-    // cout<<"\nOur pattern:\n";
-    // for(int i=0; i<pattern.size();++i){
-    //     cout<<pattern[i]<<" ";
-    // }
-    // cout<<"Bad simbol:\n";
-    // pattern.print_bad_symbol_array();
-    // cout<<"\nOut text_data:\n";
-    // for(int i=0; i<text_data.size();++i){
-    //     cout<<"("<<text_data[i].first<<",("<<text_data[i].second.first<<","<<text_data[i].second.second<<"), ";
-    // }
-    
-    // pattern.print_good_suffix_array();
-    // cout<<"\n";
+    BM_search::TPatern<uint64_t> pattern(pattern_v); // Pattern preprocessing. Including 2 Heuristics: 1) Bad Character Heuristic; 2) Good Suffix Heuristic 
+
     
     uint64_t p_size = pattern.size();
     uint64_t r_border = p_size-1;
